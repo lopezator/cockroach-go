@@ -17,10 +17,12 @@ package crdb
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach-go/v2/testserver"
+	errorspkg "github.com/friendsofgo/errors"
 )
 
 // TestExecuteTx verifies transaction retry using the classic
@@ -85,4 +87,15 @@ func (t stdlibWriteSkewTest) UpdateBalance(
 	tx := txi.(*sql.Tx)
 	_, err := tx.ExecContext(ctx, `UPDATE d.t SET balance=balance+$1 WHERE acct=$2;`, delta, acct)
 	return err
+}
+
+func TestErrIsRetriable(t *testing.T) {
+	errs := []error{
+		errorspkg.WithMessage(errorspkg.Wrap(errors.New("crdb: failed to execute a one query for access_points"), "bind failed to execute query:"), "ERROR: current transaction is aborted, commands ignored until end of transaction block (SQLSTATE 25P02)"),
+	}
+	for _, err := range errs {
+		if !errIsRetryable(err) {
+			t.Error("expected to be a retriable err")
+		}
+	}
 }

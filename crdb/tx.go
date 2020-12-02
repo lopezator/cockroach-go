@@ -19,8 +19,9 @@ package crdb
 import (
 	"context"
 	"database/sql"
-
 	"github.com/lib/pq"
+	"regexp"
+	"strings"
 )
 
 // Execute runs fn and retries it as needed. It is used to add retry handling to
@@ -189,19 +190,21 @@ func errIsRetryable(err error) bool {
 	//    has been removed server-side, but support for it has been left here for
 	//    now to maintain backwards compatibility.
 	code := errCode(err)
-	return code == "CR000" || code == "40001"
+	return code == "CR000" || code == "40001" || code == "25P02"
 }
 
 func errCode(err error) string {
 	switch t := errorCause(err).(type) {
 	case *pq.Error:
 		return string(t.Code)
-
 	case errWithSQLState:
 		return t.SQLState()
-
 	default:
-		return ""
+		var code string
+		if str := regexp.MustCompile(`\((SQLSTATE .*?)\)`).FindString(err.Error()); str != "" {
+			code = strings.TrimSuffix(strings.TrimPrefix(str, "(SQLSTATE "), ")")
+		}
+		return code
 	}
 }
 
